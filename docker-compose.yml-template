@@ -1,0 +1,28 @@
+version: '2'
+services:
+  mailmonit:
+    ##################################################
+    # BUILD section
+    ##################################################
+    build:
+      context: ./build
+      dockerfile: Dockerfile
+    ##################################################
+    # RUN section
+    ##################################################
+    image: unimock/mailmonit-docker:0.0.0
+    restart: unless-stopped
+    container_name: mailmonit
+    hostname: mailmonit
+    environment:
+      #                   rsyslog webproc postfix readlog crond
+      - DISABLED_SERVICES=
+      #- CRON_STRINGS=* * * * * root /scripts/myapp-script.sh
+    ports:
+      - "8025:25"     # smtp
+      - "8080:8080"   # webproc
+      - "8000:80"     # nginx
+      #- "8081:9001"   # supervisord
+    volumes:
+      - ./service:/service
+
