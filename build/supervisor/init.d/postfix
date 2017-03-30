@@ -18,10 +18,11 @@ mkdir -p /var/spool/postfix/var/lib/postfix
 echo " - creating /etc/mailname with <$(hostname -f)>"
 echo $(hostname -f) > /etc/mailname
 
-
 list=`cd /etc/postfix && ls *.db`
 for i in $list ; do
-   echo " - running postmap for </etc/postfix/${i%.db}>"
-   postmap /etc/postfix/${i%.db}
+   if [ "$i" != "aliases.db" ] ; then
+     echo " - running postmap for </etc/postfix/${i%.db}>"
+     postmap /etc/postfix/${i%.db}
+   fi 
 done
 

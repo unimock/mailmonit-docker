@@ -1,0 +1,37 @@
+###############################################################################
+VAR_DIR="/var/mailmonit"
+FROM="echo-request@mailmonit.intra"
+##########################
+# TRACE_LEVEL:
+# 1... TIMEOUT/OK changes
+# 2... send/receive mails
+# 4... state changes
+TRACE_LEVEL=7
+
+##########################
+# TRACE_ID:
+# "" ...... trace all ids
+# "<id>" .. trace only for <id>"
+TRACE_ID=
+
+KEEP_MONITOR_HAPPY=0
+
+#######################################################################################
+#      id       token     mail-address        server         loop(s) timeout(s) retry
+#      -------  -----    -------------------  -------------- ------  -------    ------
+#CHECK="xxxx     passwd   echo@xxxx.domain.de  -               300       15       0"
+#CHECK="yyyy     passwd   echo@yyyy.domain.de  zzzz.domain.de  300       15       0"
+#######################################################################################
+# 
+# Kommt Mail nicht innerhalb der timeout-Zeit an, wird der Zustand auf TIMEOUT gesetzt.
+# Der Zustand TIMEOUT bleibt erhalten, bis wieder eine Mail innerhalb der
+# timeout-Zeit ankommt. Erst nachdem die loop-Zeit abgelaufen ist, wird wieder eine
+# Mail verschickt (auch wenn die vorherige nicht angekommen ist).
+# Kommt eine Mail innerhalb oder nach der timeout-Zeit an, dann wird ebenfalls erst nach
+# der loop-Zeit eine neue Mail verschickt.
+#
+#
+# Konfiguration PhpPortMonitor:
+# Link:   "http://host.domain.de:<port>"
+# Result: "<id>:OK" or "<id>:TIMEOUT"
+#

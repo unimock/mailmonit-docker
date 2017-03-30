@@ -1,0 +1,227 @@
+#!/bin/bash
+CONFIG=/etc/mailmonit.dat
+. ${CONFIG}
+
+########################################################
+TRACE()
+{ 
+  l=$1
+  i=$2
+  shift ; shift
+  if [ "$TRACE_ID" = "${id[$i]}" -o "$TRACE_ID" = "" ] ; then
+
+    if [ $((${TRACE_LEVEL}&${l})) -eq ${l} ] ; then
+      echo "`date +'%H:%M:%S'` ${id[$i]} [${result[$i]}|${state[$i]}|${retry[$i]}] ${*}"
+    fi
+  fi
+}
+########################################################
+_cleanup()
+{
+  rm -rf   $VAR_DIR/echo
+  mkdir -p $VAR_DIR/echo
+  chown -Rf nobody $VAR_DIR
+  rm -f /var/www/localhost/htdocs/*.html
+}
+########################################################
+_load_config()
+{
+  IDX=0
+  while read line ; do
+    line=${line#CHECK=\"}
+    line=${line%\"}
+    if [ "$line" = "" ] ; then
+      break
+    fi
+    echo "$line"
+    arr=($line)
+    id[$IDX]="${arr[0]}"
+    pw[$IDX]="${arr[1]}"
+    to[$IDX]="${arr[2]}"
+    sr[$IDX]="${arr[3]}"
+    t_loop[$IDX]="${arr[4]}"
+    t_tout[$IDX]="${arr[5]}"
+    rmax[$IDX]="${arr[6]}"
+    ((IDX++))
+  done <<EOT
+$(grep ^CHECK= $CONFIG)
+EOT
+  ((IDX--))
+  if [ "${IDX}" = "-1" ] ; then
+     echo "no CHECK rule defined! "
+     while true ; do sleep 1 ; done
+  fi 
+  echo "IDX=$IDX"
+}
+########################################################
+_write_html()
+{
+  if [ "${KEEP_MONITOR_HAPPY}" = "1" ] ; then
+    res="OK"
+  else
+    res=${result[$idx]}
+  fi
+  tfile=`mktemp`
+  chmod a+r $tfile
+  echo "<html><head><title>mailmonit</title></head><body>"         > $tfile
+  for idx in $(seq 0 ${IDX}) ; do
+    echo "${id[$idx]}:${res}<br>"                                 >> $tfile
+    TRACE 1 $idx "write_html <${id[$idx]}:${result[$idx]}>"
+  done  
+  echo "</body></html>"                                           >> $tfile
+  mv -f $tfile /var/www/localhost/htdocs/index.html
+}
+########################################################
+_receive_mail()
+{
+  tsnd=`date -d "@"${3} +'%H:%M:%S'`
+  trpl=`date -d "@"${4} +'%H:%M:%S'`
+  trec=`date -d "@"${5} +'%H:%M:%S'`
+  TRACE 2 $1 "receive_mail time=${2}s (send=${tsnd} reply=${trpl} receive=${trec})"
+}
+########################################################
+_send_mail()
+{
+  FI=$VAR_DIR/echo/${id[$1]}
+  TIME=`date +%s`
+  echo "SEND_pw=${pw[$1]}"         > ${FI}.send
+  echo "SEND_ts_send=$TIME"       >> ${FI}.send
+  chown nobody ${FI}.send
+  if [ "${sr[$1]}" != "-" ] ; then
+    TRACE 2 $1 "send_mail -t ${to[$1]} -f ${FROM} -s ${sr[$1]} -u \"${pw[$1]} cmd=echo id=${id[$1]} ts_send=`date +%s`\""
+    sendemail -t ${to[$1]} -f ${FROM} -s ${sr[$1]} -u "${pw[$1]} cmd=echo id=${id[$1]} ts_send=`date +%s`" -m "soso" 2>&1 >/dev/null
+    ret=$?
+  else 
+    TRACE 2 $1 "send_mail : -t ${to[$1]} -f ${FROM} -u \"${pw[$1]} cmd=echo id=${id[$1]} ts_send=`date +%s`\""
+    sendemail -t ${to[$1]} -f ${FROM}              -u "${pw[$1]} cmd=echo id=${id[$1]} ts_send=`date +%s`" -m "soso" 2>&1 >/dev/null
+    ret=$?
+  fi
+  if [ "$ret" != "0" ] ; then
+    TRACE 0 $1 "???? ret=$ret TODO ????"
+  fi
+}
+########################################################
+_initialize()
+{
+  for idx in $(seq 0 ${IDX}) ; do
+    time_send[$idx]=0
+    time_receive[$idx]=0
+    timeout_count[$idx]=0
+    result[$idx]="OK"
+    prev_result[$idx]="NDEF"
+    state[$idx]="SEND"
+    retry[$idx]=0
+  done
+  change_html=1
+}
+########################################################
+_change_result()
+{
+  if [ "${prev_result[$1]}" != "${2}" ] ; then
+    TRACE 1 $1 "change result to [$2]"
+    prev_result[$1]="${result[$1]}"
+    result[$1]="$2"
+    change_html=1
+    #else
+    #  TRACE 0 $idx "!!!!! useless calling _change_result to [$2]"
+  fi
+}
+_change_state()
+{
+  ostate[$1]=state[$1]
+  TRACE 4 $1 "-> [$2] : $3"
+  state[$idx]=$2
+}
+########################################################
+_reload()
+{
+  # on reload store new configuration to mailmonit.dat
+  /usr/local/bin/ovw ${CONFIG} >/dev/null
+}
+########################################################
+echo "############################################################"
+echo "# start mailmonit                                          #"
+echo "############################################################"
+trap '_reload ; exit 0' 2
+_cleanup
+_load_config
+_initialize
+
+while true ; do
+  if [ $change_html -eq "1" ] ; then
+    _write_html
+    change_html=0
+  fi
+  sleep 1
+  for idx in $(seq 0 ${IDX}) ; do
+    FI=$VAR_DIR/echo/${id[$idx]}
+    while true ; do
+      now=$(date +%s)
+      case ${state[$idx]} in
+      "SEND")
+          if [ -e ${FI}.receive ] ; then
+              TRACE 0 $idx "!!! FILE: ${FI}.receive removed."
+          fi
+          _send_mail $idx
+          time_send[$idx]=$now
+          _change_state $idx "WAIT_RECEIVE"            "mail send, wait for response-mail."
+          break
+          ;;
+      "WAIT_RECEIVE")
+          if [ -e ${FI}.receive ] ; then
+              _change_state  $idx "RECEIVED"           "response-mail arrived within timeout-time." 
+              continue
+          fi
+          if [ $now -ge $((time_send[$idx]+t_tout[$idx])) ] ; then
+               if [ ${retry[$idx]} -ge ${rmax[$idx]}  ] ; then
+                 _change_result $idx "TIMEOUT"
+                fi
+               _change_state  $idx "WAIT_RECEIVE_TOUT" "response-mail not arrived within timeout-time."
+               break
+          fi
+          break
+          ;;
+      "WAIT_RECEIVE_TOUT")
+          if [ -e ${FI}.receive ] ; then
+              _change_state $idx "RECEIVED"           "response-mail arrived after timeout-time."
+              continue
+          fi
+          if [ $now -ge $((time_send[$idx]+t_loop[$idx])) ] ; then
+              _change_state $idx "SEND"               "response-mail not arrived within loop-time. Send next mail."
+              ((retry[$idx]++))
+              continue
+          fi
+          break
+          ;;
+      "RECEIVED")
+          .   ${FI}.receive
+          trip_time=$((${RECEIVE_rs_receive}-${RECEIVE_ts_send}))
+          _receive_mail $idx $trip_time ${RECEIVE_ts_send} ${RECEIVE_ts_reply} ${RECEIVE_rs_receive}  
+          if [ "${trip_time}" -ge "${t_tout[$idx]}" ] ; then
+              if [ ${retry[$idx]} -ge ${rmax[$idx]}  ] ; then
+                  _change_result $idx "TIMEOUT"
+              fi 
+              _change_state  $idx "WAIT_SEND" "retry=${retry[$idx]} received response-mail after timeout-time, wait loop-time ..."
+              ((retry[$idx]++))
+          else
+              _change_result $idx "OK"
+              retry[$idx]=0  
+              _change_state  $idx "WAIT_SEND" "retry=${retry[$idx]} received response-mail within timeout-time, wait loop time ..."
+          fi
+          rm ${FI}.receive
+          time_receive[$idx]=$now
+          break
+          ;;
+      "WAIT_SEND")
+          if [ $now -ge $((time_receive[$idx]+t_loop[$idx])) ] ; then
+              _change_state $idx "SEND" "loop-time expired, send next mail"
+              continue
+          fi
+          break
+          ;;
+      esac
+    done
+  done
+done
+
+

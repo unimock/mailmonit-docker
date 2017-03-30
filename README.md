@@ -28,5 +28,20 @@ contains:
      ./do login                # jump in to the container
      ./do rm                   # remove the container
 
+## Installation and Configuration
+```
+cp docker-compose.yml-template docker-compose.yml
+vi docker-compose.yml
+./do up
+./do logs
+./do login ovw /etc/webproc.toml   # write webproc config file to the service volume
+vi ./service/ovw/etc/webproc.toml  # set user and passwort for webproc
+./do restart
+```
+Point your browser to the webproc port an configure mailmonit.
+
+All configuration changes will be stored on your service volume in mailmonit.dat.
+
+Point PHPServerMonitor to the nginx port for monitoring.
 
 

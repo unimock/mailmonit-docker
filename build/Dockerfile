@@ -6,11 +6,10 @@ MAINTAINER <unimock@gate-m.de>
 # Log to stdout
 # https://hub.docker.com/r/alezzandro/postfix/~/dockerfile/
 #
-RUN apk add --update postfix supervisor nginx bash perl rsyslog dcron rsync vim tree
+RUN apk add --update postfix supervisor nginx bash perl rsyslog dcron rsync tree
 RUN wget http://caspian.dotconf.net/menu/Software/SendEmail/sendEmail-v156.zip \
     && unzip sendEmail-v156.zip sendEmail.pl && rm -f sendEmail-v156.zip
 RUN mv /sendEmail.pl /usr/bin/sendemail
-RUN ln -sf /usr/bin/vim /usr/bin/vi
 RUN  rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 ############################################################################################
 #
@@ -44,17 +43,19 @@ RUN mkdir -p /var/spool/mail/vhosts
 RUN chown root /var/spool/postfix
 RUN chown -R vmail:postdrop /var/spool/mail/vhosts
 ADD postfix/main.cf /etc/postfix/main.cf
+RUN echo "echo-request:   \"|/usr/local/bin/mailmonit.sh\"" > /etc/postfix/aliases
 RUN chmod g-w /etc/postfix/*
 EXPOSE 25 587
 VOLUME /var/spool/mail/vhosts
 ############################################################################################
 #
-# webproc
+# webproc with mailmonit
 #
 RUN mkdir -p /usr/local/sbin
-RUN touch /etc/webproc.dat
-COPY ./webproc/webproc      /usr/local/sbin/
-COPY ./webproc/webproc.toml /etc/webproc.toml
+COPY ./webproc/webproc       /usr/local/sbin/
+COPY ./webproc/webproc.toml  /etc/webproc.toml
+COPY ./webproc/webproc.toml  /etc/webproc.toml
+COPY ./webproc/mailmonit.dat /etc/mailmonit.dat
 ############################################################################################
 #
 # docker-extensions
