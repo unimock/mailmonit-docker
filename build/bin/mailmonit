@@ -12,6 +12,7 @@ TRACE()
 
     if [ $((${TRACE_LEVEL}&${l})) -eq ${l} ] ; then
       echo "`date +'%H:%M:%S'` ${id[$i]} [${result[$i]}|${state[$i]}|${retry[$i]}] ${*}"
+      logger -t mailmonit -p mail.info "${id[$i]} [${result[$i]}|${state[$i]}|${retry[$i]}] ${*}" 
     fi
   fi
 }
@@ -108,7 +109,6 @@ _initialize()
     time_receive[$idx]=0
     timeout_count[$idx]=0
     result[$idx]="OK"
-    prev_result[$idx]="NDEF"
     state[$idx]="SEND"
     retry[$idx]=0
   done
@@ -117,9 +117,8 @@ _initialize()
 ########################################################
 _change_result()
 {
-  if [ "${prev_result[$1]}" != "${2}" ] ; then
+  if [ "${result[$1]}" != "${2}" ] ; then
     TRACE 1 $1 "change result to [$2]"
-    prev_result[$1]="${result[$1]}"
     result[$1]="$2"
     change_html=1
     #else

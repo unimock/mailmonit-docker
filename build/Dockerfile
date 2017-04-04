@@ -6,11 +6,12 @@ MAINTAINER <unimock@gate-m.de>
 # Log to stdout
 # https://hub.docker.com/r/alezzandro/postfix/~/dockerfile/
 #
-RUN apk add --update postfix supervisor nginx bash perl rsyslog dcron rsync tree
+RUN apk add --update postfix supervisor nginx bash perl rsyslog dcron rsync tree tzdata
 RUN wget http://caspian.dotconf.net/menu/Software/SendEmail/sendEmail-v156.zip \
     && unzip sendEmail-v156.zip sendEmail.pl && rm -f sendEmail-v156.zip
 RUN mv /sendEmail.pl /usr/bin/sendemail
-RUN  rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+RUN rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+RUN cp -f /usr/share/zoneinfo/Europe/Berlin /etc/localtime
 ############################################################################################
 #
 # cron

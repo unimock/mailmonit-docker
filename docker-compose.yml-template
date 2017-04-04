@@ -10,7 +10,7 @@ services:
     ##################################################
     # RUN section
     ##################################################
-    image: unimock/mailmonit-docker:0.0.1
+    image: unimock/mailmonit-docker:0.0.3
     restart: unless-stopped
     container_name: mailmonit
     hostname: mailmonit
